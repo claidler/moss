@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="appName">Moss</string>
+    <string name="launcherName">Moss</string>
+    <string name="launchUrl">https://bot.claidler.uk/</string>
+    <string name="hostName">bot.claidler.uk</string>
+    <string name="webManifestUrl">https://bot.claidler.uk/manifest.webmanifest</string>
+    <string name="providerAuthority">uk.claidler.moss.fileprovider</string>
+    <string name="fallbackType">webview</string>
+    <string name="orientation">default</string>
+    <string name="generatorApp">moss-android</string>
+    <string name="assetStatements">[{&quot;relation&quot;: [&quot;delegate_permission/common.handle_all_urls&quot;], &quot;target&quot;: {&quot;namespace&quot;: &quot;android_app&quot;, &quot;package_name&quot;: &quot;uk.claidler.moss&quot;, &quot;sha256_cert_fingerprints&quot;: [&quot;4C:E4:63:DB:16:DE:08:96:26:85:63:96:6E:21:9E:81:53:C2:EB:9D:FE:E9:11:71:0C:57:1E:32:3C:DB:61:3C&quot;]}}]</string>
+</resources>

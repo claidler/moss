@@ -145,6 +145,8 @@ function isPublicPath(p) {
     p === "/icon-512.png" ||
     p === "/icon-512-maskable.png" ||
     p === "/manifest.webmanifest" ||
+    p === "/sw.js" ||
+    p === "/.well-known/assetlinks.json" ||
     p.startsWith("/vendor/")
   );
 }

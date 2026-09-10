@@ -9,6 +9,7 @@ A tiny chat layer for [OpenClaw](https://docs.openclaw.ai). Moss is a modular No
 - Cookie-based login with a per-install generated password (`data/PASSWORD`, `data/auth.json`).
 - Notes and uploads support (`notes.js` plus `notes-text.js` / `notes-store.js` / `notes-enrich.js`, `uploads.js`).
 - Progressive web app manifest + icons for install-on-phone.
+- Android app (`android/`) — Trusted Web Activity wrapping the live PWA.
 
 ## Layout
 
@@ -27,16 +28,21 @@ notes.js             Automations poll + /api/notifications facade
 notes-text.js        Heartbeat/progress/truncation classifiers
 notes-store.js       notifications.json load/save/upsert
 notes-enrich.js      Transcript/history body recovery
+push.js              Web Push (VAPID) for automations and finished chats
 uploads.js           Upload handling
 server.js            HTTP wiring only
 index.html           Chat UI shell (markup + vendor + module entry)
 css/app.css          Client styles
 js/                  Client ES modules (app.js entry)
+js/notify.js         Notification permission, SW register, local toasts
+sw.js                Service worker for Web Push and notification clicks
 login.html           Login page
 manifest.webmanifest PWA manifest
 make-icons.py        Regenerates the icon PNG set from icon.svg
+android/             Trusted Web Activity wrapper (sideload APK)
+.well-known/         Digital Asset Links for the Android app
 vendor/              Vendored deps (marked, DOMPurify, Prism) — no build step
-data/                Runtime state (gitignored): store.json, notifications.json, auth
+data/                Runtime state (gitignored): store.json, notifications.json, auth, vapid, push-subs
 ```
 
 ## Run
@@ -58,3 +64,7 @@ Environment:
 The gateway target is set in `config.js` (`GW`). `data/` is created on first run and holds the JSON stores plus the generated login password — show it on first boot and store it somewhere safe.
 
 Typically run behind a reverse proxy (systemd unit `moss.service` + Caddy) so the PWA gets HTTPS on the LAN.
+
+## Android app
+
+`android/` is a Trusted Web Activity for `https://bot.claidler.uk` — the same Moss PWA, with a launcher icon and no browser chrome once Digital Asset Links verify. Build with **Actions → Android APK**, or see `android/README.md`.
