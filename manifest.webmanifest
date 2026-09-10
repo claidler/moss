@@ -1,0 +1,42 @@
+{
+  "name": "Moss",
+  "short_name": "Moss",
+  "description": "Chat with OpenClaw",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fafaf8",
+  "theme_color": "transparent",
+  "theme_colors": [
+    { "color": "#fafaf8", "media": "(prefers-color-scheme: light)" },
+    { "color": "#0d0d0e", "media": "(prefers-color-scheme: dark)" }
+  ],
+  "background_colors": [
+    { "color": "#fafaf8", "media": "(prefers-color-scheme: light)" },
+    { "color": "#0d0d0e", "media": "(prefers-color-scheme: dark)" }
+  ],
+  "color_scheme_dark": {
+    "background_color": "#0d0d0e",
+    "theme_color": "#0d0d0e"
+  },
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

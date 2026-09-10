@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Moss</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafaf8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0e" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  :root {
+    --bg: #fafaf8; --fg: #1a1a1a; --card: #fff; --muted-fg: #6c6c70;
+    --border: #e8e8e4; --primary: #1a1a1a; --primary-fg: #f1f1ef;
+    --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d0d0e; --fg: #ececee; --card: #141416; --muted-fg: #85858a;
+      --border: #26262a; --primary: #f1f1ef; --primary-fg: #1a1a1a;
+    }
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); }
+  html { color-scheme: light dark; }
+  body {
+    color: var(--fg); font: 16px/1.5 var(--font);
+    display: grid; place-items: center;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  form {
+    width: min(360px, calc(100% - 40px));
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 28px 24px 24px;
+  }
+  .mark { width: 56px; height: 56px; display: block; margin: 0 auto 14px; }
+  h1 { margin: 0 0 6px; text-align: center; font-size: 22px; letter-spacing: -0.03em; }
+  p { margin: 0 0 18px; text-align: center; color: var(--muted-fg); font-size: 14px; }
+  input {
+    width: 100%; font: inherit; color: inherit;
+    background: transparent; border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 14px; outline: none;
+  }
+  button {
+    width: 100%; margin-top: 12px; font: inherit; font-weight: 650;
+    border: 0; border-radius: 12px; padding: 12px;
+    background: var(--primary); color: var(--primary-fg); cursor: pointer;
+  }
+  .err { color: #dc2626; font-size: 13px; min-height: 1.3em; margin-top: 10px; text-align: center; }
+</style>
+</head>
+<body>
+<form id="form">
+  <img class="mark" src="/icon.svg" alt="">
+  <h1>Moss</h1>
+  <p>Sign in to continue</p>
+  <input id="pw" type="password" autocomplete="current-password" placeholder="Password" autofocus>
+  <button type="submit">Continue</button>
+  <div class="err" id="err"></div>
+</form>
+<script>
+document.getElementById("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = document.getElementById("err");
+  err.textContent = "";
+  const password = document.getElementById("pw").value;
+  try {
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password })
+    });
+    if (!res.ok) {
+      err.textContent = res.status === 429 ? "Too many tries. Wait a bit." : "Wrong password.";
+      return;
+    }
+    location.replace("/");
+  } catch (e) {
+    err.textContent = "Couldn’t reach Moss.";
+  }
+});
+</script>
+</body>
+</html>
