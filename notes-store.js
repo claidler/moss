@@ -152,6 +152,14 @@ function todayItems(notes, nowMs) {
   return list;
 }
 
+// Full history, newest first. The board pages this list by calendar day, so the
+// day-pagination arrows need every day in one response (MAX_NOTES caps it).
+function listItems(notes) {
+  const list = (notes.items || []).filter((n) => n && n.createdAt);
+  list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return list;
+}
+
 function slimNote(n, full) {
   if (!n) return null;
   const row = {
@@ -193,6 +201,7 @@ module.exports = {
   upsertNote,
   sameLocalDay,
   todayItems,
+  listItems,
   slimNote,
   unreadCount,
   ingestRun,

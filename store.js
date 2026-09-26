@@ -76,4 +76,4 @@ function touchChat(store, chat) {
   store.chats = [chat].concat(store.chats.filter((c) => c.id !== chat.id));
 }
 
-module.exports = { newChat, loadStore, saveStore, touchChat, resetStoreCache };
+module.exports = { newChat, loadStore, saveStore, touchChat, resetStoreCache, storePath };

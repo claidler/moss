@@ -31,6 +31,7 @@ notes.js             Automations poll + /api/notifications facade
 notes-text.js        Heartbeat/progress/truncation classifiers
 notes-store.js       notifications.json load/save/upsert
 notes-enrich.js      Transcript/history body recovery
+search.js            GET /api/search — substring search over chats + board notes
 push.js              Web Push (VAPID) for automations and finished chats
 uploads.js           Upload handling
 transcribe.js        POST /api/transcribe → Groq whisper-large-v3-turbo

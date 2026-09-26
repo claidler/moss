@@ -31,7 +31,14 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
-    <div class="search">Search</div>
+    <div class="searchbox">
+      <svg class="search-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="searchInput" type="text" placeholder="Search chats" autocomplete="off" spellcheck="false" aria-label="Search chats">
+      <button class="search-clear" id="searchClear" type="button" aria-label="Clear search" hidden>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="search-results" id="searchResults" hidden></div>
     <div class="bots" id="bots"></div>
   </aside>
   <main>
@@ -41,7 +48,14 @@
       </button>
       <div class="avatar" id="headAvatar"></div>
       <h1 id="chatTitle">Moss</h1>
+      <button class="icon-btn day-nav" id="dayPrev" type="button" aria-label="Previous day" title="Older day" hidden>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+      <button class="icon-btn day-nav" id="dayNext" type="button" aria-label="Next day" title="Newer day" hidden>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
       <span class="status" id="status" title="Connecting"><span class="dot"></span></span>
+      <button class="icon-btn new-chat head-new" id="newChatTop" type="button" aria-label="New chat">+</button>
     </header>
     <div id="log"></div>
     <button id="toBottom" type="button" hidden>Latest ↓</button>

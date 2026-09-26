@@ -3,6 +3,7 @@ const notes = require("./notes");
 const push = require("./push");
 const goals = require("./goals");
 const { loadStore, saveStore } = require("./store");
+const { fromAgentTool, fromThinkingPayload } = require("./sse");
 const {
   titleFrom,
   slimTools,
@@ -105,6 +106,7 @@ function handleQuestionEvent(msg) {
 }
 
 function handleGatewayEvent(msg) {
+  if (!msg) return;
   handleQuestionEvent(msg);
   notes.handleCronEvent(msg);
   const change = goals.handleGoalEvent(msg);
@@ -120,6 +122,25 @@ function handleGatewayEvent(msg) {
     // Goal completion is when a detached run's final reply becomes available;
     // reconcile pulls it into the store so the chat never renders question-only.
     try { require("./reconcile").onGoalChange(change); } catch {}
+  }
+  const p = msg.payload || {};
+  const chatId = chatIdFromRaw(p);
+  const run = chatId ? runs.get(chatId) : null;
+  if (!run || run.done) return;
+
+  if (msg.event === "agent" && (p.stream === "thinking" || p.stream === "item")) {
+    const entry = fromThinkingPayload(p);
+    if (entry && typeof run.injectThinking === "function") {
+      run.injectThinking(entry);
+    }
+    return;
+  }
+  if (msg.event === "session.tool" || (msg.event === "agent" && (!p.stream || p.stream === "tool"))) {
+    const tool = fromAgentTool(p);
+    if (tool && typeof run.injectTool === "function") {
+      run.injectTool(tool);
+    }
+    return;
   }
 }
 
@@ -273,6 +294,7 @@ function cancelRun(chatId) {
     }
   }
   runs.delete(chatId);
+  try { require("./gateway").unsubscribeSession("moss-" + chatId); } catch {}
 }
 
 function sidebarChats(store) {

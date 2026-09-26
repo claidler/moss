@@ -49,8 +49,33 @@ function ensureSentenceSpacing(s) {
 function stripThinkTags(text) {
   return String(text || "")
     .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<think>[\s\S]*$/gi, "")
     .replace(/<\|im_start\|>thinking[\s\S]*?<\|im_end\|>/gi, "")
+    .replace(/<\|im_start\|>thinking[\s\S]*$/gi, "")
     .replace(/^\s+/, "");
+}
+
+function extractInlineThinking(text) {
+  if (!text) return [];
+  const out = [];
+  const reThink = /<think>([\s\S]*?)<\/think>/gi;
+  let m;
+  while ((m = reThink.exec(text)) !== null) {
+    const t = m[1].trim();
+    if (t) out.push(clipText(t, 8000));
+  }
+  const reIm = /<\|im_start\|>thinking([\s\S]*?)<\|im_end\|>/gi;
+  while ((m = reIm.exec(text)) !== null) {
+    const t = m[1].trim();
+    if (t) out.push(clipText(t, 8000));
+  }
+  if (!out.length) {
+    const unclosed = text.match(/<think>([\s\S]*)$/i) || text.match(/<\|im_start\|>thinking([\s\S]*)$/i);
+    if (unclosed && unclosed[1].trim()) {
+      out.push(clipText(unclosed[1].trim(), 8000));
+    }
+  }
+  return out;
 }
 
 // Remove thinking-fragment prefixes that leak into the answer text.
@@ -179,6 +204,7 @@ function cleanMessages(messages) {
     .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
     .map((m) => {
       const row = { role: m.role, content: m.content };
+      if (Number(m.t)) row.t = Number(m.t);
       if (typeof m.goalSend === "string" && m.goalSend) row.goalSend = m.goalSend.slice(0, 16200);
       if (Array.isArray(m.images) && m.images.length) {
         row.images = m.images.filter((u) => typeof u === "string" && u).slice(0, 8);
@@ -215,8 +241,8 @@ function cleanMessages(messages) {
 function chatIdFromSession(sessionKey) {
   if (!sessionKey) return "";
   const s = String(sessionKey);
-  if (/^moss-[a-z0-9]+$/i.test(s)) return s.slice(5);
-  const m = s.match(/:moss-([a-z0-9]+)$/i);
+  if (/^moss-[a-z0-9_-]+$/i.test(s)) return s.slice(5);
+  const m = s.match(/(?:^|:)moss-([a-z0-9_-]+)(?:[:#]|$)/i);
   return m ? m[1] : "";
 }
 
@@ -224,7 +250,10 @@ function sameMossSession(eventKey, want, canonical) {
   if (!want || !eventKey) return false;
   if (eventKey === want || eventKey === canonical) return true;
   const key = String(eventKey);
-  return key.endsWith(":" + want) || key === "agent:" + AGENT_ID + ":" + want;
+  if (key.endsWith(":" + want) || key === "agent:" + AGENT_ID + ":" + want) return true;
+  const wantId = chatIdFromSession(want);
+  const eventId = chatIdFromSession(eventKey);
+  return Boolean(wantId && eventId && wantId === eventId);
 }
 
 module.exports = {
@@ -234,6 +263,7 @@ module.exports = {
   thinkingJoined,
   ensureSentenceSpacing,
   stripThinkTags,
+  extractInlineThinking,
   stripThinkingPrefix,
   slimTools,
   slimQuestion,

@@ -1,5 +1,5 @@
-import { log, chatTitle, headAvatar, askEl, state } from "./state.js";
-import { timeLabel, splitNoteBody, isProgressOnlyNote } from "./format.js";
+import { log, chatTitle, headAvatar, askEl, state, syncDayNav } from "./state.js";
+import { timeLabel, splitNoteBody, isProgressOnlyNote, dayKey, dayLabel } from "./format.js";
 import { showMossNote, syncUi } from "./notify.js";
 
 export function visibleNotes() {
@@ -20,6 +20,7 @@ export function setView(next) {
 export function renderBoardRow() {
   const row = document.createElement("div");
   row.className = "bot-row board-row" + (state.view !== "chat" ? " active" : "");
+  if (state.view !== "chat") row.setAttribute("aria-current", "true");
   const third = state.notesUnread > 0
     ? `<span class="badge">${state.notesUnread > 99 ? "99+" : state.notesUnread}</span>`
     : `<div class="bot-time"></div>`;
@@ -127,6 +128,52 @@ export async function markAllRead() {
   if (state.view === "board") paintBoard();
 }
 
+// The board pages one calendar day at a time, newest day first. Pages are
+// rebuilt from state.notes on every paint and the cursor follows the day KEY,
+// so a note landing on today's page cannot shift the reader off their day.
+function buildBoardDayPages() {
+  const ordered = visibleNotes().slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const pages = [];
+  const index = new Map();
+  ordered.forEach((n) => {
+    const key = dayKey(n.createdAt) || "undated";
+    if (!index.has(key)) {
+      index.set(key, pages.length);
+      pages.push({ key, label: dayLabel(n.createdAt), notes: [] });
+    }
+    pages[index.get(key)].notes.push(n);
+  });
+  let cursor = 0;
+  const prev = state.boardDayPages;
+  if (prev && prev.keys && prev.keys.length) {
+    const wanted = state.boardDayKey || (prev.keys[prev.cursor] || "");
+    const found = prev.keys.indexOf(wanted);
+    cursor = found >= 0 ? found : 0;
+  }
+  if (cursor >= pages.length) cursor = pages.length - 1;
+  state.boardDayPages = { keys: pages.map((p) => p.key), cursor };
+  return { pages, cursor };
+}
+
+export function stepBoardDay(dir) {
+  const { pages } = buildBoardDayPages();
+  if (!pages.length) return;
+  const next = Math.max(0, Math.min(pages.length - 1, state.boardDayPages.cursor + dir));
+  state.boardDayPages.cursor = next;
+  state.boardDayKey = pages[next] ? pages[next].key : "";
+  paintBoard();
+}
+
+// Opening a note keeps the board on the day that contains it.
+export function focusBoardDay(id) {
+  const { pages, cursor } = buildBoardDayPages();
+  if (pages.length < 2) return;
+  const idx = pages.findIndex((p) => p.notes.some((n) => n.id === id));
+  if (idx < 0 || idx === cursor) return;
+  state.boardDayPages.cursor = idx;
+  state.boardDayKey = pages[idx].key;
+}
+
 export function paintBoard() {
   setView("board");
   state.noteOpen = null;
@@ -141,12 +188,18 @@ export function paintBoard() {
   askEl.hidden = true;
   askEl.innerHTML = "";
   state.hooks.syncBusy();
-  const shown = visibleNotes();
-  if (!shown.length) {
+  const { pages, cursor } = buildBoardDayPages();
+  if (!pages.length) {
     log.innerHTML = '<div id="empty"><h2>Automations</h2><p>When scheduled jobs finish, they land here like a newsletter. Tap one to read it in full.</p></div>';
     state.emptyEl = document.getElementById("empty");
+    syncDayNav([], 0);
     return;
   }
+  const day = document.createElement("div");
+  day.className = "day-label board-day";
+  day.textContent = pages[cursor].label;
+  log.appendChild(day);
+  const shown = pages[cursor].notes;
   const wrap = document.createElement("div");
   wrap.className = "notes";
   shown.forEach((n) => {
@@ -162,10 +215,12 @@ export function paintBoard() {
     wrap.appendChild(btn);
   });
   log.appendChild(wrap);
+  syncDayNav(pages, cursor);
 }
 
 export async function openNote(id) {
   setView("article");
+  focusBoardDay(id);
   state.noteOpen = id;
   state.hooks.setNav(false);
   log.innerHTML = "";
@@ -189,6 +244,7 @@ export async function openNote(id) {
     kicker.className = "stamp";
     kicker.textContent = (item.status === "error" ? "Failed · " : "Automation · ") + timeLabel(item.createdAt);
     log.appendChild(kicker);
+    syncDayNav([], 0);
     const split = splitNoteBody(item.content || item.preview || "");
     if (!split.body) {
       const empty = document.createElement("div");

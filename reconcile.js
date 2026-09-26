@@ -19,7 +19,7 @@ function init(deps) {
 }
 
 const COOLDOWN_COMMIT_MS = 60000;
-const COOLDOWN_NONE_MS = 3000;
+const COOLDOWN_NONE_MS = 30000;
 const COOLDOWN_ERROR_MS = 20000;
 const nextTry = new Map();
 
@@ -108,6 +108,7 @@ async function heal(chatId, chat, opts) {
   }
   nextTry.set(chatId, now + COOLDOWN_COMMIT_MS);
   runs.commitAssistant(chatId, { content: text });
+  try { require("./gateway").unsubscribeSession("moss-" + chatId); } catch {}
   console.log("moss-heal", chatId, String(text).replace(/\s+/g, " ").slice(0, 80));
   if (notify) {
     try {

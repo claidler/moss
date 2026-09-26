@@ -5,8 +5,8 @@ const { GW, HOP, AGENT_ID } = require("./config");
 const { json, readBody } = require("./http-utils");
 const push = require("./push");
 const { loadStore } = require("./store");
-const { stripThinkingPrefix, slimQuestions, chatIdFromSession, sameMossSession } = require("./text");
-const { gatewayToken, connectGatewayWs } = require("./gateway");
+const { stripThinkingPrefix, slimQuestions, chatIdFromSession, sameMossSession, extractInlineThinking } = require("./text");
+const { gatewayToken, ensureHub, subscribeSession, unsubscribeSession } = require("./gateway");
 const { chatOverrides, applyChatSession } = require("./models");
 const goals = require("./goals");
 const {
@@ -26,8 +26,12 @@ const {
 } = require("./sse");
 
 function sessionKeyFromUser(user) {
-  return typeof user === "string" && /^moss-[a-z0-9]+$/i.test(user) ? user : "";
+  return typeof user === "string" && /^moss-[a-z0-9_-]+$/i.test(user) ? user : "";
 }
+
+// Agent tools that mutate session-goal state; a result event means the
+// gateway session row just changed goal-wise.
+const GOAL_TOOLS = new Set(["create_goal", "update_goal"]);
 
 function upstreamHeaders(req, bodyLength) {
   const headers = {};
@@ -109,8 +113,6 @@ async function proxyChat(req, res) {
     console.log("moss-uploads skipped:", e && e.message);
   }
   const bodyOut = Buffer.from(JSON.stringify(payload));
-  let wsHandle = null;
-  let canonical = sessionKey;
   let finished = false;
   let clientAttached = true;
   const identity = { id: "", created: 0, model: "openclaw/default" };
@@ -168,32 +170,36 @@ async function proxyChat(req, res) {
     try { res.write(chunk); } catch { clientAttached = false; }
   };
 
+  // `finished` is set by the upstream [DONE] frame, but the commit happens in
+  // finishRun (upstream `end`). A ws event can still land between those two,
+  // so data upsert is gated on run.done; only the client write stops at
+  // `finished`. Gating both on `finished` dropped the last tool result.
   const inject = (tool) => {
-    if (finished || !tool) return;
+    if (run.done || !tool) return;
     upsertRunTool(tools, tool);
     run.partial = answer;
-    if (!clientAttached) return;
+    if (finished || !clientAttached) return;
     startSse();
     writeClient(toolSse(identity, tool));
   };
 
   const injectThinking = (entry) => {
-    if (finished || !entry || !entry.text) return;
+    if (run.done || !entry || !entry.text) return;
     const id = entry.id || "thinking";
     if (!thinkingMap.has(id)) thinkingOrder.push(id);
     if (entry.replace === false) thinkingMap.set(id, (thinkingMap.get(id) || "") + entry.text);
     else thinkingMap.set(id, entry.text);
     run.thinking = thinkingList();
     run.partial = stripThinkingPrefix(answer, run.thinking);
-    if (!clientAttached) return;
+    if (finished || !clientAttached) return;
     startSse();
     writeClient(thinkingSse(identity, run.thinking));
   };
 
   run.injectQuestion = (question) => {
-    if (finished || !question) return;
+    if (run.done || !question) return;
     run.questions = slimQuestions((run.questions || []).concat([question]));
-    if (!clientAttached) return;
+    if (finished || !clientAttached) return;
     startSse();
     writeClient(questionSse(identity, question));
   };
@@ -213,13 +219,17 @@ async function proxyChat(req, res) {
   const cleanup = () => {
     finished = true;
     stopHeartbeat();
-    try { if (wsHandle && wsHandle.ws) wsHandle.ws.close(); } catch {}
+    if (sessionKey) unsubscribeSession(sessionKey).catch(() => {});
   };
 
   const finishRun = (err) => {
     if (run.done) return;
     run.done = true;
-    const think = thinkingList();
+    let think = thinkingList();
+    if (!think.length) {
+      const inline = extractInlineThinking(answer);
+      if (inline.length) think = inline;
+    }
     const content = stripThinkingPrefix(answer, think);
     run.thinking = think;
     run.partial = content;
@@ -260,61 +270,30 @@ async function proxyChat(req, res) {
   // while we open the tool-events websocket (that delay was aborting Chrome).
   startSse();
 
-  const handleToolEvent = (msg) => {
-    if (!msg) return;
-    if (msg.event === "question.requested" || msg.event === "question.resolved") {
-      const p = msg.payload || {};
-      if (p.sessionKey && !sameMossSession(p.sessionKey, sessionKey, canonical) && chatIdFromSession(p.sessionKey) !== chatId) {
-        return;
-      }
-      handleQuestionEvent(msg);
-      return;
-    }
-    if (msg.event !== "session.tool" && msg.event !== "agent") return;
-    const p = msg.payload || {};
-    if (!sameMossSession(p.sessionKey, sessionKey, canonical)) return;
-    if (msg.event === "agent" && (p.stream === "thinking" || p.stream === "item")) {
-      const entry = fromThinkingPayload(p);
-      if (entry) {
-        console.log("moss-thinking", p.stream, (entry.text || "").slice(0, 80));
-        injectThinking(entry);
-      }
-      return;
-    }
-    if (msg.event === "agent" && p.stream && p.stream !== "tool") return;
-    const tool = fromAgentTool(p);
-    if (tool) {
-      console.log("moss-tools", tool.phase, tool.name);
-      inject(tool);
+  run.injectTool = (tool) => {
+    console.log("moss-tools", tool.phase, tool.name);
+    inject(tool);
+    // Goal tools do not broadcast sessions.changed when they mutate, and on
+    // the /goal chat-turn path the goal is created by the agent's own
+    // create_goal call mid-run. Sync the goal cache the moment such a tool
+    // returns and push the snapshot into this stream, so the Goal pill shows
+    // live instead of after a reload.
+    if (GOAL_TOOLS.has(tool.name) && tool.phase === "result" && chatId && !run.done) {
+      goals
+        .scheduleFreshSync(chatId)
+        .then((goal) => {
+          const next = goal || null;
+          if (JSON.stringify(next) === JSON.stringify(run.goal || null)) return;
+          console.log("moss-goal-sync", chatId, next ? next.status : "cleared");
+          if (!run.done && typeof run.injectGoal === "function") run.injectGoal(next);
+        })
+        .catch(() => {});
     }
   };
 
-  if (sessionKey) {
-    connectGatewayWs(handleToolEvent, {
-      scopes: ["operator.read", "operator.questions"],
-      caps: ["tool-events"],
-    })
-      .then(async (h) => {
-        if (finished) {
-          try { h.ws.close(); } catch {}
-          return;
-        }
-        wsHandle = h;
-        try {
-          await h.rpc("sessions.subscribe", {});
-        } catch (e) {
-          console.log("moss-tools sessions.subscribe skipped:", e.message);
-        }
-        if (finished) return;
-        const sub = await h.rpc("sessions.messages.subscribe", { key: sessionKey, agentId: AGENT_ID });
-        if (sub && sub.key) canonical = sub.key;
-        console.log("moss-tools subscribed", canonical);
-      })
-      .catch((e) => {
-        console.log("moss-tools ws skipped:", e.message);
-        wsHandle = null;
-      });
-  }
+  run.injectThinking = (entry) => {
+    injectThinking(entry);
+  };
 
   let over = { model: "", thinkingLevel: "" };
   if (chatId) {
@@ -322,6 +301,13 @@ async function proxyChat(req, res) {
     if (over.model || over.thinkingLevel) {
       await applyChatSession(chatId, over.model, over.thinkingLevel);
     }
+  }
+
+  // Ensure persistent hub connection is ready to receive tool/thinking events.
+  // When hub is already connected (normal state), this resolves immediately (0ms).
+  try { await ensureHub(2000); } catch {}
+  if (sessionKey) {
+    try { await subscribeSession(sessionKey); } catch {}
   }
 
   const headers = upstreamHeaders(req, bodyOut.length);
@@ -341,6 +327,18 @@ async function proxyChat(req, res) {
           msg = (j.error && (j.error.message || j.error.type || j.error)) || raw.slice(0, 300) || msg;
         } catch {
           if (raw) msg = raw.slice(0, 300);
+        }
+        const isConflict = up.statusCode === 409 || /SessionWorkStartChangedError|changed while starting work|already running/i.test(msg);
+        if (isConflict) {
+          console.log("moss-chat session already active in OpenClaw", chatId, msg);
+          if (clientAttached && !res.writableEnded) {
+            writeClient("data: " + JSON.stringify({ error: { message: msg, code: "pending" } }) + "\n\n");
+            writeClient("data: [DONE]\n\n");
+            try { res.end(); } catch {}
+          }
+          finished = true;
+          stopHeartbeat();
+          return;
         }
         writeSseError(msg);
       });
@@ -367,6 +365,19 @@ async function proxyChat(req, res) {
               const delta = j.choices && j.choices[0] && j.choices[0].delta;
               if (delta && typeof delta.reasoning_content === "string" && delta.reasoning_content) {
                 injectThinking({ id: "reasoning", text: delta.reasoning_content, replace: false });
+              }
+              if (delta && Array.isArray(delta.tool_calls)) {
+                delta.tool_calls.forEach((t) => {
+                  const fn = t.function || {};
+                  inject({
+                    id: t.id || "",
+                    idx: t.index,
+                    name: fn.name || "",
+                    args: typeof fn.arguments === "string" ? fn.arguments : "",
+                    phase: "start",
+                    appendArgs: !fn.name && typeof fn.arguments === "string",
+                  });
+                });
               }
               if (delta && typeof delta.content === "string" && delta.content) {
                 answer += delta.content;

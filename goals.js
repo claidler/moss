@@ -1,8 +1,8 @@
 // Moss — OpenClaw session Goals: per-chat cache, live events, REST bridge.
 // Goal state lives in the gateway; this module caches the latest snapshot per
 // chat so GET /api/chats and the Goal pill render stay fast, keeps the cache
-// warm from hub sessions.changed(reason=goal) events, and proxies operator
-// writes through sessions.goal.update / sessions.goal.clear.
+// warm from hub sessions.changed events that carry a goal row, and proxies
+// operator writes through sessions.goal.update / sessions.goal.clear.
 const { chatIdFromSession } = require("./text");
 const { AGENT_ID } = require("./config");
 const { nid } = require("./http-utils");
@@ -50,7 +50,33 @@ function forget(chatId) {
   byChat.delete(chatId);
 }
 
-// sessions.changed carrying a goal mutation -> refresh cache from the event.
+// One forced cache refresh per chat at a time, with a short retry loop: on the
+// HTTP completion path the goal is created by the agent's own create_goal tool
+// call mid-run (no broadcast at creation), and it can land a beat after the
+// tool event that triggered the sync. Resolves with the chat's goal (or null).
+const freshSyncs = new Map();
+function scheduleFreshSync(chatId) {
+  if (!chatId) return Promise.resolve(null);
+  const existing = freshSyncs.get(chatId);
+  if (existing) return existing;
+  const p = (async () => {
+    let goal = null;
+    for (let attempt = 0; attempt < 3 && !goal; attempt++) {
+      goal = (await allFresh(true))[chatId] || null;
+      if (!goal) await new Promise((r) => setTimeout(r, 600));
+    }
+    freshSyncs.delete(chatId);
+    return goal || peek(chatId);
+  })();
+  freshSyncs.set(chatId, p);
+  return p;
+}
+
+// sessions.changed carrying a goal snapshot or a goal-scoped mutation.
+// Note: the gateway broadcasts the goal row on several reasons (goal,
+// command-metadata, chat.run.started, send-callback, ...), so a goal-bearing
+// snapshot is trusted on any reason; `goal: null` alone only counts when the
+// change is goal-scoped, otherwise a pre-goal snapshot could erase a goal.
 function handleGoalEvent(msg) {
   if (!msg || msg.event !== "sessions.changed") return null;
   const p = msg.payload || {};
@@ -159,4 +185,15 @@ async function mutate(chatId, body) {
   return remember(chatId, result && result.goal ? slimGoal(result.goal) : null);
 }
 
-module.exports = { init, peek, forget, remember, handleGoalEvent, allFresh, mutate, clearTerminal, slimGoal };
+module.exports = {
+  init,
+  peek,
+  forget,
+  remember,
+  handleGoalEvent,
+  allFresh,
+  mutate,
+  clearTerminal,
+  slimGoal,
+  scheduleFreshSync,
+};

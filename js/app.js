@@ -1,11 +1,12 @@
-import { log, input, sendBtn, stopBtn, askEl, attachBtn, attachInput, toBottomBtn, state, viewingChatId } from "./state.js";
-import { boot, checkGateway, send, stopChat, chatById, clearComposer, setNav, createChat, refreshVisible } from "./chats.js";
+import { log, input, sendBtn, stopBtn, askEl, attachBtn, attachInput, toBottomBtn, dayPrevBtn, dayNextBtn, state, viewingChatId } from "./state.js";
+import { boot, checkGateway, send, stopChat, chatById, clearComposer, setNav, createChat, refreshVisible, stepDay } from "./chats.js";
 import { bootModels } from "./models.js";
 import { bootSlash, hideSlashMenu } from "./slash.js";
 import { stagedSnapshot, stageFiles } from "./media.js";
 import { bindDictation } from "./dictation.js";
 import { hideNoteMenu, markAllRead, bindLongPress, showNoteMenuFor } from "./board.js";
 import { bootNotify, syncUi } from "./notify.js";
+import { bootSearch } from "./search.js";
 import { bootGoals } from "./goals.js";
 import { syncToBottom, stickToBottom } from "./scroll.js";
 import { bindGestures } from "./gestures.js";
@@ -89,6 +90,9 @@ document.getElementById("openNav").addEventListener("click", () => setNav(true))
 document.getElementById("closeNav").addEventListener("click", () => setNav(false));
 document.getElementById("scrim").addEventListener("click", () => setNav(false));
 document.getElementById("newChat").addEventListener("click", () => createChat());
+document.getElementById("newChatTop").addEventListener("click", () => createChat());
+if (dayPrevBtn) dayPrevBtn.addEventListener("click", () => stepDay(1));
+if (dayNextBtn) dayNextBtn.addEventListener("click", () => stepDay(-1));
 document.getElementById("markAllRead").addEventListener("click", () => markAllRead());
 document.addEventListener("pointerdown", (e) => {
   const menu = document.getElementById("noteMenu");
@@ -136,6 +140,7 @@ document.addEventListener("keydown", (e) => {
 
 bindGestures();
 bindDictation();
+bootSearch();
 checkGateway();
 bootModels();
 bootSlash();

@@ -148,7 +148,9 @@ async function api(req, res) {
   const notes = store.loadNotes();
 
   if (!id && req.method === "GET") {
-    const items = store.todayItems(notes);
+    // Full history in one response: the client pages it by calendar day
+    // (left/right arrows). MAX_NOTES already caps the list.
+    const items = store.listItems(notes);
     json(res, 200, {
       unread: items.filter((n) => !n.readAt).length,
       items: items.map((n) => store.slimNote(n, false)),

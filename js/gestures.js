@@ -30,7 +30,7 @@ function navWidth() {
 function ignoreNavStart(t) {
   if (!t || !t.closest) return true;
   if (t.closest("input, textarea, select, iframe, audio, video")) return true;
-  if (t.closest("#openNav, #closeNav, #newChat, #send, #stop, #attachBtn, .del, .icon-btn, .attach, .send, .stop")) return true;
+  if (t.closest("#openNav, #closeNav, #newChat, #newChatTop, #send, #stop, #attachBtn, .del, .icon-btn, .attach, .send, .stop")) return true;
   return false;
 }
 

@@ -11,6 +11,8 @@ export const toBottomBtn = document.getElementById("toBottom");
 export const attachBtn = document.getElementById("attachBtn");
 export const attachInput = document.getElementById("attachInput");
 export const micBtn = document.getElementById("micBtn");
+export const dayPrevBtn = document.getElementById("dayPrev");
+export const dayNextBtn = document.getElementById("dayNext");
 export const dictationStatus = document.getElementById("dictationStatus");
 export const thumbsEl = document.getElementById("thumbs");
 export const MAX_IMAGES = 8;
@@ -28,6 +30,8 @@ export const state = {
   noteChatId: null,
   noteContent: "",
   switchGen: 0,
+  boardDayPages: {},
+  boardDayKey: "",
   notesTimer: null,
   notesSeen: new Set(),
   notesReady: false,
@@ -37,6 +41,23 @@ export const state = {
   pollInFlight: false,
   hooks: {}
 };
+
+// Shared header day-nav chrome. Left = older day, right = newer day.
+// Both the chat sidebar and the Automations board call this after they
+// rebuild their own day pages.
+export function syncDayNav(pages, cursor) {
+  if (!dayPrevBtn || !dayNextBtn) return;
+  const multi = pages.length > 1;
+  dayPrevBtn.hidden = !multi || cursor >= pages.length - 1;
+  dayNextBtn.hidden = !multi || cursor <= 0;
+  const label = pages[cursor] && pages[cursor].label;
+  if (label) {
+    chatTitle.dataset.day = label;
+    chatTitle.title = label;
+  } else {
+    chatTitle.removeAttribute("title");
+  }
+}
 
 export function viewingChatId() {
   if (state.view === "article") return state.noteChatId;

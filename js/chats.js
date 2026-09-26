@@ -1,6 +1,6 @@
 import {
   log, input, sendBtn, stopBtn, statusEl, botsEl, chatTitle, headAvatar, askEl, state,
-  viewingChatId, isLiveView
+  viewingChatId, isLiveView, syncDayNav
 } from "./state.js";
 import { blobSvg, colorFor } from "./faces.js";
 import { stripMentions, setMentionStrip, timeLabel } from "./format.js";
@@ -9,11 +9,11 @@ import { stickToBottom, captureScroll } from "./scroll.js";
 import { attachmentHint, normalizeImages, normalizeFiles, fileHint, clearStaged } from "./media.js";
 import { streamChat } from "./stream.js";
 import {
-  thinkingList, stripThinkingPrefix, paintThinking, toolLabel,
+  thinkingList, stripThinkingPrefix, paintThinking, toolLabel, extractInlineThinking,
   pendingQuestions, paintTools, upsertTool, upsertQuestion, paintQsums, captureGroupOpenStates
 } from "./tools.js";
 import { renderAsk, slimClientQuestions } from "./ask.js";
-import { renderBoardRow, refreshNotes, ensureNotesPoll, paintBoard, setView, openNote } from "./board.js";
+import { renderBoardRow, refreshNotes, ensureNotesPoll, paintBoard, setView, openNote, stepBoardDay } from "./board.js";
 import { showMossNote, syncUi, enableNotifications } from "./notify.js";
 import { syncModelBar, waitSettings } from "./models.js";
 
@@ -122,15 +122,11 @@ export function add(role, text, tools, questions, opts) {
   return bubble;
 }
 
-const faceCache = new Map();
+// No string cache here: js/faces.js caches the geometry internally and stamps
+// a fresh animation phase per call, so rebuilt elements resume instead of
+// snapping back on the 1s live repaint.
 function faceFor(id, gid) {
-  const key = id + ":" + gid;
-  let html = faceCache.get(key);
-  if (!html) {
-    html = blobSvg(colorFor(id), gid);
-    faceCache.set(key, html);
-  }
-  return html;
+  return blobSvg(colorFor(id), gid);
 }
 
 function visibleChats() {
@@ -164,12 +160,19 @@ export function syncListSelection() {
     return;
   }
   for (const row of botsEl.children) {
-    if (row.classList.contains("board-row")) {
-      row.classList.toggle("active", state.view !== "chat");
-    } else {
-      row.classList.toggle("active", state.view === "chat" && row.dataset.id === state.activeId);
-    }
+    const isActive = row.classList.contains("board-row")
+      ? state.view !== "chat"
+      : state.view === "chat" && row.dataset.id === state.activeId;
+    row.classList.toggle("active", isActive);
+    if (isActive) row.setAttribute("aria-current", "true");
+    else row.removeAttribute("aria-current");
   }
+}
+
+// Day pagination belongs to the Automations board only; the chat sidebar stays
+// a single flat list. The shared header buttons drive `stepBoardDay`.
+export function stepDay(dir) {
+  stepBoardDay(dir);
 }
 
 export function renderList() {
@@ -184,7 +187,10 @@ export function renderList() {
   ordered.forEach((c) => {
     const row = document.createElement("div");
     row.dataset.id = c.id;
-    row.className = "bot-row" + (state.view === "chat" && c.id === state.activeId ? " active" : "") + (c.pending ? " running" : "") + (c.goal && c.goal.id && c.goal.status !== "complete" ? " has-goal" : "");
+    const isActive = state.view === "chat" && c.id === state.activeId;
+    row.className = "bot-row" + (isActive ? " active" : "") + (c.pending ? " running" : "") + (c.goal && c.goal.id && c.goal.status !== "complete" ? " has-goal" : "");
+    row.style.setProperty("--row-accent", colorFor(c.id));
+    if (isActive) row.setAttribute("aria-current", "true");
     if (c.pending) row.setAttribute("aria-busy", "true");
     row.innerHTML =
       `<div class="avatar${c.pending ? " working" : ""}">${faceFor(c.id, "b" + c.id)}</div>
@@ -247,6 +253,8 @@ export function paintChat(chat, opts) {
   // scrolled up is not yanked back to the bottom while thinking streams.
   const stick = !opts || opts.stick !== false;
   setView("chat");
+  // Chat sidebar is one flat list; only the Automations board pages by day.
+  syncDayNav([], 0);
   state.noteOpen = null;
   state.noteChatId = null;
   const restoreScroll = captureScroll();
@@ -870,6 +878,7 @@ export async function startTurn(chat) {
     }, chat.abort.signal, (j) => {
       if (j.error) {
         streamErr = new Error(j.error.message || j.error.code || "OpenClaw error");
+        if (j.error.code) streamErr.code = j.error.code;
         return;
       }
       try {
@@ -912,6 +921,10 @@ export async function startTurn(chat) {
         }
         if (delta.content) {
           answer += delta.content;
+          if (!chat.thinking || !chat.thinking.length) {
+            const inline = extractInlineThinking(answer);
+            if (inline.length) chat.thinking = inline;
+          }
           changed = true;
         }
         if (changed) paintLive();
@@ -921,7 +934,14 @@ export async function startTurn(chat) {
     if (streamErr && !chat.stopping) throw streamErr;
     const last = chat.messages[chat.messages.length - 1];
     const asked = slimClientQuestions(chat.questions);
-    const think = thinkingList(chat.thinking);
+    let think = thinkingList(chat.thinking);
+    if (!think.length) {
+      const inline = extractInlineThinking(answer);
+      if (inline.length) {
+        think = inline;
+        chat.thinking = inline;
+      }
+    }
     const visible = stripThinkingPrefix(answer, think);
     const stopped = !!chat.stopping;
     const hasBody = !!(visible || tools.length || asked.length || think.length);
@@ -967,7 +987,7 @@ export async function startTurn(chat) {
       return;
     }
     const raw = (e && e.message) || "request failed";
-    const dropped = e.name === "AbortError" || e.code === "pending" || /failed to fetch|networkerror|load failed|connection|aborted/i.test(raw);
+    const dropped = e.name === "AbortError" || e.code === "pending" || /failed to fetch|networkerror|load failed|connection|aborted|changed while starting work|already running|conflict/i.test(raw);
     if (dropped) {
       chat.abort = null;
       chat.pending = true;
@@ -990,7 +1010,11 @@ export async function startTurn(chat) {
       setStatus("bad");
     }
     if (answer || tools.length || thinkingList(chat.thinking).length) {
-      const think = thinkingList(chat.thinking);
+      let think = thinkingList(chat.thinking);
+      if (!think.length) {
+        const inline = extractInlineThinking(answer);
+        if (inline.length) think = inline;
+      }
       chat.messages.push({
         role: "assistant",
         content: stripThinkingPrefix(answer, think) || errText,

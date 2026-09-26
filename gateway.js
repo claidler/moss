@@ -85,6 +85,52 @@ function connectGatewayWs(onEvent, opts) {
 // Persistent hub connection shared for cheap RPCs and question events.
 let hub = null;
 let hubTimer = null;
+let hubReadyResolve = null;
+let hubReadyPromise = null;
+const activeSubscriptions = new Set();
+
+function resetHubReady() {
+  hubReadyPromise = new Promise((resolve) => {
+    hubReadyResolve = resolve;
+  });
+}
+resetHubReady();
+
+function ensureHub(timeoutMs) {
+  if (hub && hub.ws && hub.ws.readyState === 1) return Promise.resolve(hub);
+  const ms = typeof timeoutMs === "number" ? timeoutMs : 4000;
+  return Promise.race([
+    hubReadyPromise,
+    new Promise((resolve) => setTimeout(() => resolve(hub), ms)),
+  ]);
+}
+
+async function subscribeSession(sessionKey) {
+  if (!sessionKey) return null;
+  activeSubscriptions.add(sessionKey);
+  const h = await ensureHub(2000);
+  if (!h || !h.rpc || !h.ws || h.ws.readyState !== 1) return null;
+  try {
+    const res = await h.rpc("sessions.messages.subscribe", { key: sessionKey, agentId: AGENT_ID });
+    console.log("moss-tools subscribed", sessionKey, res && res.key);
+    return res;
+  } catch (e) {
+    console.log("moss-tools subscribe skipped:", e.message);
+    return null;
+  }
+}
+
+async function unsubscribeSession(sessionKey) {
+  if (!sessionKey) return null;
+  activeSubscriptions.delete(sessionKey);
+  const h = await ensureHub(1000);
+  if (!h || !h.rpc || !h.ws || h.ws.readyState !== 1) return null;
+  try {
+    return await h.rpc("sessions.messages.unsubscribe", { key: sessionKey, agentId: AGENT_ID });
+  } catch {
+    return null;
+  }
+}
 
 function hubCovers(scopes) {
   if (!hub || !hub.ws || hub.ws.readyState !== 1 || typeof hub.rpc !== "function") return false;
@@ -118,7 +164,10 @@ function startHub(onEvent) {
   }).then(async (h) => {
     hub = h;
     h.ws.addEventListener("close", () => {
-      if (hub === h) hub = null;
+      if (hub === h) {
+        hub = null;
+        resetHubReady();
+      }
       if (!hubTimer) hubTimer = setTimeout(() => startHub(onEvent), 2000);
     });
     try {
@@ -133,8 +182,24 @@ function startHub(onEvent) {
     try {
       await h.rpc("sessions.subscribe", {});
       console.log("moss-hub sessions.subscribe ok");
+      for (const key of activeSubscriptions) {
+        try {
+          await h.rpc("sessions.messages.subscribe", { key, agentId: AGENT_ID });
+          console.log("moss-hub resubscribed", key);
+        } catch (e) {
+          console.log("moss-hub resubscribe error", key, e.message);
+        }
+      }
+      if (hubReadyResolve) {
+        hubReadyResolve(h);
+        hubReadyResolve = null;
+      }
     } catch (e) {
       console.log("moss-hub sessions.subscribe skipped:", e.message);
+      if (hubReadyResolve) {
+        hubReadyResolve(h);
+        hubReadyResolve = null;
+      }
     }
   }).catch((e) => {
     console.log("moss-questions hub skipped:", e.message);
@@ -195,4 +260,4 @@ async function abortChatRun(chatId) {
   }
 }
 
-module.exports = { gatewayToken, connectGatewayWs, gatewayRpc, startHub, steerFollowup, abortChatRun };
+module.exports = { gatewayToken, connectGatewayWs, gatewayRpc, startHub, ensureHub, subscribeSession, unsubscribeSession, steerFollowup, abortChatRun };

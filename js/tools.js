@@ -20,8 +20,35 @@ export function thinkingJoined(parts) {
   return thinkingList(parts).join("\n\n");
 }
 
+export function extractInlineThinking(text) {
+  if (!text) return [];
+  const out = [];
+  const reThink = /<think>([\s\S]*?)<\/think>/gi;
+  let m;
+  while ((m = reThink.exec(text)) !== null) {
+    const t = m[1].trim();
+    if (t) out.push(t);
+  }
+  const reIm = /<\|im_start\|>thinking([\s\S]*?)<\|im_end\|>/gi;
+  while ((m = reIm.exec(text)) !== null) {
+    const t = m[1].trim();
+    if (t) out.push(t);
+  }
+  if (!out.length) {
+    const unclosed = text.match(/<think>([\s\S]*)$/i) || text.match(/<\|im_start\|>thinking([\s\S]*)$/i);
+    if (unclosed && unclosed[1].trim()) {
+      out.push(unclosed[1].trim());
+    }
+  }
+  return out;
+}
+
 export function stripThinkingPrefix(text, parts) {
-  let out = String(text || "").replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<\|im_start\|>thinking[\s\S]*?<\|im_end\|>/gi, "");
+  let out = String(text || "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<think>[\s\S]*$/gi, "")
+    .replace(/<\|im_start\|>thinking[\s\S]*?<\|im_end\|>/gi, "")
+    .replace(/<\|im_start\|>thinking[\s\S]*$/gi, "");
   const original = out;
   const frags = thinkingList(parts).slice().sort((a, b) => b.length - a.length);
   let changed = true;

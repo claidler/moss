@@ -20,6 +20,30 @@ export function timeLabel(ts) {
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+// Calendar-day bucket key for history pagination (one page per day).
+export function dayKey(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return "";
+  return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+}
+
+function hm(d) {
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+export function dayLabel(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  const now = new Date();
+  const key = dayKey(ts);
+  if (key === dayKey(now.getTime())) return "Today · " + hm(d);
+  const y = new Date(now.getTime());
+  y.setDate(y.getDate() - 1);
+  if (key === dayKey(y.getTime())) return "Yesterday · " + hm(d);
+  return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " · " + hm(d);
+}
+
 let mentionRe = null;
 
 // Configure "@handle" stripping from /api/config (server sets MOSS_OWNER_HANDLE).
