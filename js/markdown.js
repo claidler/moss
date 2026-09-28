@@ -1,6 +1,24 @@
+// Links must leave the app: in a standalone PWA a plain <a> navigates the
+// chat away. The hook stamps target=_blank on every anchor DOMPurify lets
+// through, so Chrome opens a new browser window/tab instead (Chris,
+// 2026-09-28). Same-origin links open a fresh app window; external ones go
+// to the browser.
+let linkTargetHookOn = false;
+function ensureLinkTargetHook() {
+  if (linkTargetHookOn || !window.DOMPurify || typeof DOMPurify.addHook !== "function") return;
+  DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+    if (node.tagName === "A" && node.getAttribute("href")) {
+      node.setAttribute("target", "_blank");
+      node.setAttribute("rel", "noopener noreferrer");
+    }
+  });
+  linkTargetHookOn = true;
+}
+
 export function renderMd(text) {
   const src = text || "";
   const raw = window.marked ? marked.parse(src, { breaks: true, gfm: true }) : src;
+  if (window.DOMPurify) ensureLinkTargetHook();
   return window.DOMPurify ? DOMPurify.sanitize(raw, {
     ADD_TAGS: ["details", "summary", "video", "source", "picture", "mark", "figure", "figcaption", "kbd"],
     ADD_ATTR: ["open", "controls", "poster", "playsinline"]
@@ -87,7 +105,7 @@ export function previewDoc(src, lang) {
   const body = src || "";
   const sizer = sizerScript();
   if (kind === "svg") {
-    return "<!DOCTYPE html><html><head><meta charset=\"utf-8\">" + themeStyle(false) +
+    return "<!DOCTYPE html><html><head><meta charset=\"utf-8\">" + themeStyle(false) + LINK_BASE +
       "<style>html,body{margin:0;padding:0}body{display:grid;place-items:center;min-height:120px;padding:12px}</style>" +
       "</head><body>" + body + sizer + "</body></html>";
   }
@@ -159,7 +177,9 @@ export function enhanceCodeBlocks(root, allowPreview) {
     if (previewable) {
       const frame = document.createElement("iframe");
       frame.className = "html-frame";
-      frame.setAttribute("sandbox", "allow-scripts");
+      // allow-popups* so links inside a preview can open a new browser
+      // window instead of doing nothing (base target="_blank" is injected).
+      frame.setAttribute("sandbox", "allow-scripts allow-popups allow-popups-to-escape-sandbox");
       frame.setAttribute("referrerpolicy", "no-referrer");
       frame.title = "HTML preview";
       frame.srcdoc = previewDoc(src, lang);
