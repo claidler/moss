@@ -1,0 +1,6 @@
+{"version": "1.2.0",
+ "packagesDir": ".lake/packages",
+ "packages": [],
+ "name": "moss_proofs",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}
