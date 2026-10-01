@@ -251,7 +251,8 @@ async function paintDiffRepo() {
     log.appendChild(empty);
     return;
   }
-  if (!diffState.open.size && files.length <= 8) files.forEach((f) => diffState.open.add(f.path));
+  // Files always start collapsed (Chris, 2026-10-01): the head row is the only
+  // thing painted until tapped, so the diff list stays short on every repo.
   files.forEach((f) => log.appendChild(paintFile(f)));
 }
 
@@ -275,31 +276,37 @@ function paintFile(f) {
       box.classList.remove("open");
     } else {
       diffState.open.add(f.path);
-      if (!box.dataset.filled) fillFile(box, f);
+      if (!box.dataset.filled) fillFile(body, f);
       box.classList.add("open");
     }
   });
   box.appendChild(head);
 
-  if (diffState.open.has(f.path)) fillFile(box, f);
+  // Hunks live in a body wrapper that CSS shows only while .open, so the
+  // toggle is a plain class flip and can never desync from the open set.
+  const body = document.createElement("div");
+  body.className = "diff-body";
+  box.appendChild(body);
+
+  if (diffState.open.has(f.path)) fillFile(body, f);
   return box;
 }
 
 // Hunks are built lazily on first open so a 40-file diff stays snappy to paint.
-function fillFile(box, f) {
-  box.dataset.filled = "1";
+function fillFile(body, f) {
+  body.parentElement.dataset.filled = "1";
   if (f.binary) {
     const bin = document.createElement("div");
     bin.className = "diff-none";
     bin.textContent = "Binary file";
-    box.appendChild(bin);
+    body.appendChild(bin);
     return;
   }
   if (!f.hunks.length && f.status === "D") {
     const gone = document.createElement("div");
     gone.className = "diff-none";
     gone.textContent = "File deleted";
-    box.appendChild(gone);
+    body.appendChild(gone);
     return;
   }
   const lang = langForPath(f.path);
@@ -329,6 +336,6 @@ function fillFile(box, f) {
       row.appendChild(txt);
       hunk.appendChild(row);
     });
-    box.appendChild(hunk);
+    body.appendChild(hunk);
   });
 }

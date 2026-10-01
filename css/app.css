@@ -1302,6 +1302,8 @@
   transition: transform 0.15s ease;
 }
 .diff-file.open .diff-chev { transform: rotate(90deg); }
+.diff-body { display: none; }
+.diff-file.open .diff-body { display: block; }
 .diff-hunk { border-top: 1px solid var(--border); }
 .diff-hunk-head {
   font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
