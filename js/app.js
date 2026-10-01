@@ -111,7 +111,7 @@ document.addEventListener("keydown", (e) => {
 });
 bindLongPress(document.querySelector(".chat-head"), () => {
   showNoteMenuFor(document.querySelector(".chat-head"));
-}, () => state.view !== "chat");
+}, () => state.view === "board" || state.view === "article");
 input.addEventListener("input", () => {
   input.style.height = "auto";
   input.style.height = Math.min(input.scrollHeight, 140) + "px";

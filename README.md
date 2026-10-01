@@ -8,6 +8,7 @@ A tiny chat layer for [OpenClaw](https://docs.openclaw.ai). Moss is a modular No
 - Proxies `/v1` chat completions to the OpenClaw gateway.
 - Cookie-based login with a per-install generated password (`data/PASSWORD`, `data/auth.json`).
 - Notes and uploads support (`notes.js` plus `notes-text.js` / `notes-store.js` / `notes-enrich.js`, `uploads.js`).
+- **Changes view** (`diff.js` + `js/diff.js`) — browse `git diff` across your repos from the sidebar: repo cards with branch/dirty/ahead pills, per-file hunks with line numbers and per-language syntax highlighting (JS/TS, Python, Rust, Go, shell, … plus Lean via a hand-written Prism grammar in `vendor/prism-lean.js`). Point `MOSS_REPOS` at your worktrees; uncommitted, last commit, or any commit range.
 - Web Push (VAPID) for automation output and finished chats.
 - Progressive web app manifest + icons for install-on-phone.
 - Optional Android app (`android/`) — Trusted Web Activity wrapping your deployed PWA.
@@ -32,6 +33,7 @@ notes-text.js        Heartbeat/progress/truncation classifiers
 notes-store.js       notifications.json load/save/upsert
 notes-enrich.js      Transcript/history body recovery
 search.js            GET /api/search — substring search over chats + board notes
+diff.js              GET /api/diff/* — repo cards, diffs, commits for MOSS_REPOS worktrees
 push.js              Web Push (VAPID) for automations and finished chats
 uploads.js           Upload handling
 transcribe.js        POST /api/transcribe → Groq whisper-large-v3-turbo
@@ -40,6 +42,7 @@ server.js            HTTP wiring only
 index.html           Chat UI shell (markup + vendor + module entry)
 css/app.css          Client styles
 js/                  Client ES modules (app.js entry)
+js/diff.js           Changes view: repo cards, file list, lazy hunks, Prism highlighting
 js/notify.js         Notification permission, SW register, local toasts
 sw.js                Service worker for Web Push and notification clicks
 login.html           Login page
@@ -87,6 +90,7 @@ Defaults in parentheses. Only `GROQ_API_KEY` and the Android variables are neede
 | `MOSS_HISTORY_FILE` | `data/history.json` | Chat history location |
 | `MOSS_VAPID_FILE` | `data/vapid.json` | VAPID key pair location |
 | `MOSS_PUSH_SUBS_FILE` | `data/push-subs.json` | Push subscription store location |
+| `MOSS_REPOS` | _(empty)_ | Comma-separated directories of git worktrees to show in the Changes view. Invalid/non-git entries are skipped per request. Repo ids are directory basenames. |
 
 `data/` is created on first run and holds the JSON stores, the generated login password, the VAPID private key, and push subscriptions. It is gitignored — chat history never ends up in the repo.
 

@@ -39,6 +39,14 @@ const AUTH_FILE = path.join(ROOT, "data", "auth.json");
 const PASSWORD_FILE = path.join(ROOT, "data", "PASSWORD");
 const VAPID_FILE = process.env.MOSS_VAPID_FILE || path.join(ROOT, "data", "vapid.json");
 const PUSH_SUBS_FILE = process.env.MOSS_PUSH_SUBS_FILE || path.join(ROOT, "data", "push-subs.json");
+// Git repos exposed in the Changes view (MOSS_REPOS=path1,path2,…). Each must
+// be an existing git worktree; invalid entries are skipped at request time.
+const REPOS = (process.env.MOSS_REPOS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean)
+  .map((p) => path.resolve(p));
+
 const COOKIE = "moss_session";
 const SESSION_MS = 30 * 24 * 3600 * 1000;
 
@@ -73,6 +81,7 @@ module.exports = {
   PASSWORD_FILE,
   VAPID_FILE,
   PUSH_SUBS_FILE,
+  REPOS,
   COOKIE,
   SESSION_MS,
   HOP,

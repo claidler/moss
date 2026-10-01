@@ -5,6 +5,7 @@ const models = require("./models");
 const commands = require("./commands");
 const transcribe = require("./transcribe");
 const search = require("./search");
+const diff = require("./diff");
 const uploads = require("./uploads");
 const goals = require("./goals");
 const reconcile = require("./reconcile");
@@ -49,6 +50,7 @@ async function api(req, res) {
   if (await commands.api(req, res)) return true;
   if (await transcribe.api(req, res)) return true;
   if (await search.api(req, res)) return true;
+  if (await diff.api(req, res)) return true;
   const url = path0;
   if (url === "/api/config" && req.method === "GET") {
     json(res, 200, { ownerHandle: OWNER_HANDLE });

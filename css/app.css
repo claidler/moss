@@ -1216,3 +1216,130 @@
     padding: 8px 10px;
   }
   .goal-save { background: color-mix(in srgb, var(--bot) 16%, var(--muted)); }
+
+/* ---------- Changes (git diff) view ---------- */
+.diff-repos {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  padding: 14px 0 24px;
+}
+.diff-repo-card {
+  text-align: left; cursor: pointer;
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 12px 14px; color: var(--fg); font: inherit;
+}
+.diff-repo-card:hover { border-color: color-mix(in srgb, var(--mark) 45%, var(--border)); }
+.diff-repo-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.diff-repo-name { font-weight: 700; font-size: 15px; }
+.diff-repo-branch {
+  font-size: 11px; color: var(--muted-fg);
+  background: var(--muted); border-radius: 999px; padding: 2px 8px;
+}
+.diff-repo-pills { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.diff-pill {
+  font-size: 11px; font-weight: 650; border-radius: 999px; padding: 2px 8px;
+  background: var(--muted); color: var(--muted-fg);
+}
+.diff-pill.dirty { background: color-mix(in srgb, #f5a03c 18%, var(--card)); color: #b06a12; }
+.diff-pill.clean { background: color-mix(in srgb, var(--ok) 14%, var(--card)); color: var(--ok); }
+.diff-pill.ab { background: color-mix(in srgb, var(--mark) 14%, var(--card)); color: var(--mark); }
+@media (prefers-color-scheme: dark) {
+  .diff-pill.dirty { color: #f5c98a; }
+}
+.diff-repo-last {
+  margin-top: 10px; font-size: 12px; color: var(--muted-fg);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.diff-repo-last b { color: var(--tok-num); font-weight: 650; }
+.diff-toolbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 12px 0 6px;
+}
+.diff-back {
+  border: 1px solid var(--border); background: var(--muted); color: var(--fg);
+  border-radius: 9px; padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer;
+}
+.diff-back:hover { border-color: color-mix(in srgb, var(--mark) 45%, var(--border)); }
+.diff-base {
+  margin-left: auto; max-width: 46%;
+  font: inherit; font-size: 12px; color: var(--fg);
+  background: var(--muted); border: 1px solid var(--border); border-radius: 9px;
+  padding: 5px 8px;
+}
+.diff-reload {
+  border: 1px solid var(--border); background: var(--muted); color: var(--fg);
+  border-radius: 9px; padding: 4px 9px; font: inherit; font-size: 13px; cursor: pointer;
+}
+.diff-summary { font-size: 12px; color: var(--muted-fg); padding: 4px 0 10px; }
+.diff-summary .d-add { color: var(--ok); }
+.diff-summary .d-del { color: #d3455b; }
+.diff-none { font-size: 13px; color: var(--muted-fg); padding: 10px 2px 18px; }
+.diff-file {
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--card); margin-bottom: 10px; overflow: hidden;
+}
+.diff-file-head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: var(--code-head); border: 0; color: var(--fg);
+  padding: 8px 10px; font: inherit; font-size: 13px; cursor: pointer; text-align: left;
+}
+.diff-status {
+  font-size: 10px; font-weight: 800; border-radius: 5px; padding: 1px 5px;
+  background: var(--muted); color: var(--muted-fg); flex: 0 0 auto;
+}
+.diff-status.s-a { background: color-mix(in srgb, var(--ok) 18%, var(--card)); color: var(--ok); }
+.diff-status.s-d { background: color-mix(in srgb, #d3455b 16%, var(--card)); color: #d3455b; }
+.diff-status.s-r { background: color-mix(in srgb, var(--tok-attr) 16%, var(--card)); color: var(--tok-attr); }
+.diff-path {
+  flex: 1 1 auto; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.diff-counts { flex: 0 0 auto; font-size: 11px; }
+.diff-counts .d-add { color: var(--ok); }
+.diff-counts .d-del { color: #d3455b; }
+.diff-chev {
+  flex: 0 0 auto; color: var(--muted-fg); font-size: 15px;
+  transition: transform 0.15s ease;
+}
+.diff-file.open .diff-chev { transform: rotate(90deg); }
+.diff-hunk { border-top: 1px solid var(--border); }
+.diff-hunk-head {
+  font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--muted-fg); background: var(--muted);
+  padding: 2px 10px;
+}
+.dl {
+  display: flex; gap: 0;
+  font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.dl.add { background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.dl.del { background: color-mix(in srgb, #d3455b 9%, transparent); }
+.dl-no {
+  flex: 0 0 34px; text-align: right; padding: 0 6px;
+  color: var(--muted-fg); opacity: 0.75; user-select: none;
+  border-right: 1px solid var(--border);
+}
+.dl-txt {
+  flex: 1 1 auto; min-width: 0; padding: 0 8px;
+  white-space: pre; overflow-x: auto;
+}
+.dl.add .dl-txt::before { content: "+"; color: var(--ok); margin-right: 4px; }
+.dl.del .dl-txt::before { content: "−"; color: #d3455b; margin-right: 4px; }
+.dl.ctx .dl-txt::before { content: " "; margin-right: 4px; }
+.dl-txt .token.comment, .dl-txt .token.prolog, .dl-txt .token.doctype, .dl-txt .token.cdata { color: var(--tok-cmt); font-style: italic; }
+.dl-txt .token.string, .dl-txt .token.attr-value, .dl-txt .token.inserted { color: var(--tok-str); }
+.dl-txt .token.keyword, .dl-txt .token.important { color: var(--tok-kw); }
+.dl-txt .token.function, .dl-txt .token.class-name { color: var(--tok-fn); }
+.dl-txt .token.number, .dl-txt .token.boolean, .dl-txt .token.constant { color: var(--tok-num); }
+.dl-txt .token.tag, .dl-txt .token.selector, .dl-txt .token.property { color: var(--tok-tag); }
+.dl-txt .token.attr-name { color: var(--tok-attr); }
+.dl-txt .token.punctuation, .dl-txt .token.operator { color: var(--tok-pun); }
+.avatar.diff-face {
+  display: grid; place-items: center;
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, var(--card));
+  border-radius: 10px;
+}
+.avatar.diff-face svg { width: 18px; height: 18px; filter: none; }
+body.diff .composer-stack { display: none; }
+body.diff #log { padding-bottom: 24px; }

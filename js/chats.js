@@ -5,7 +5,7 @@ import {
 import { blobSvg, colorFor } from "./faces.js";
 import { stripMentions, setMentionStrip, timeLabel } from "./format.js";
 import { setBubble } from "./markdown.js";
-import { stickToBottom, captureScroll } from "./scroll.js";
+import { stickToBottom, captureScroll, syncToBottom } from "./scroll.js";
 import { attachmentHint, normalizeImages, normalizeFiles, fileHint, clearStaged } from "./media.js";
 import { streamChat } from "./stream.js";
 import {
@@ -14,6 +14,7 @@ import {
 } from "./tools.js";
 import { renderAsk, slimClientQuestions } from "./ask.js";
 import { renderBoardRow, refreshNotes, ensureNotesPoll, paintBoard, setView, openNote, stepBoardDay } from "./board.js";
+import { renderDiffRow, openDiff } from "./diff.js";
 import { showMossNote, syncUi, enableNotifications } from "./notify.js";
 import { syncModelBar, waitSettings } from "./models.js";
 
@@ -161,8 +162,10 @@ export function syncListSelection() {
   }
   for (const row of botsEl.children) {
     const isActive = row.classList.contains("board-row")
-      ? state.view !== "chat"
-      : state.view === "chat" && row.dataset.id === state.activeId;
+      ? state.view === "board" || state.view === "article"
+      : row.classList.contains("diff-row")
+        ? state.view === "diff"
+        : state.view === "chat" && row.dataset.id === state.activeId;
     row.classList.toggle("active", isActive);
     if (isActive) row.setAttribute("aria-current", "true");
     else row.removeAttribute("aria-current");
@@ -178,6 +181,7 @@ export function stepDay(dir) {
 export function renderList() {
   botsEl.innerHTML = "";
   botsEl.appendChild(renderBoardRow());
+  botsEl.appendChild(renderDiffRow());
   const ordered = visibleChats().slice().sort((a, b) => {
     const ap = a.pending ? 1 : 0;
     const bp = b.pending ? 1 : 0;
@@ -223,13 +227,13 @@ export function chatById(id) {
 }
 
 export function syncBusy() {
-  if (state.view === "board") {
+  if (state.view === "board" || state.view === "diff") {
     sendBtn.disabled = true;
     if (stopBtn) {
       stopBtn.hidden = true;
       stopBtn.disabled = true;
     }
-    input.placeholder = "Automations board";
+    input.placeholder = state.view === "diff" ? "Changes view" : "Automations board";
     headAvatar.classList.remove("working");
     return;
   }
@@ -760,7 +764,9 @@ export async function hydrateNoteThread(item) {
     if (chat.pending && !(last && last.role === "assistant" && !last.seed)) {
       add("bot", chat.partial || "", chat.liveTools, chat.questions, { preview: false, thinking: chat.thinking, liveThinking: true, stick: false });
     }
-    stickToBottom(true);
+    // Opened automations open at the start; only a live run pins to the latest.
+    if (chat.pending) stickToBottom(true);
+    else { log.scrollTop = 0; syncToBottom(); }
     renderAsk(chat);
     syncBusy();
     syncModelBar(chat);
@@ -1069,6 +1075,7 @@ Object.assign(state.hooks, {
   stopChat,
   switchChat,
   openNote,
+  openDiff,
   rememberChat,
   hydrateNoteThread,
   ensureNoteThread

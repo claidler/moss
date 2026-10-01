@@ -1,4 +1,5 @@
 import { log, chatTitle, headAvatar, askEl, state, syncDayNav } from "./state.js";
+import { syncToBottom } from "./scroll.js";
 import { timeLabel, splitNoteBody, isProgressOnlyNote, dayKey, dayLabel } from "./format.js";
 import { showMossNote, syncUi } from "./notify.js";
 
@@ -12,15 +13,17 @@ export function boardGlyph() {
 
 export function setView(next) {
   state.view = next;
-  document.body.classList.toggle("board", next !== "chat");
+  document.body.classList.toggle("board", next === "board" || next === "article");
   document.body.classList.toggle("article", next === "article");
+  document.body.classList.toggle("diff", next === "diff");
   syncUi();
 }
 
 export function renderBoardRow() {
+  const boardish = state.view === "board" || state.view === "article";
   const row = document.createElement("div");
-  row.className = "bot-row board-row" + (state.view !== "chat" ? " active" : "");
-  if (state.view !== "chat") row.setAttribute("aria-current", "true");
+  row.className = "bot-row board-row" + (boardish ? " active" : "");
+  if (boardish) row.setAttribute("aria-current", "true");
   const third = state.notesUnread > 0
     ? `<span class="badge">${state.notesUnread > 99 ? "99+" : state.notesUnread}</span>`
     : `<div class="bot-time"></div>`;
@@ -252,7 +255,12 @@ export async function openNote(id) {
       empty.innerHTML = "<h2>No update</h2><p>This run had nothing to report.</p>";
       log.appendChild(empty);
     } else {
-      state.hooks.add("bot", split.body, null, null, split.thinking.length ? { thinking: split.thinking } : undefined);
+      const bodyOpts = split.thinking.length ? { thinking: split.thinking } : {};
+      bodyOpts.stick = false;
+      state.hooks.add("bot", split.body, null, null, bodyOpts);
+      // Opened automations read top-down: land at the start, not the end.
+      log.scrollTop = 0;
+      syncToBottom();
     }
     const n = state.notes.find((x) => x.id === id);
     if (n) n.read = true;

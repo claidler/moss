@@ -61,7 +61,7 @@ export function syncDayNav(pages, cursor) {
 
 export function viewingChatId() {
   if (state.view === "article") return state.noteChatId;
-  if (state.view === "board") return null;
+  if (state.view === "board" || state.view === "diff") return null;
   return state.activeId;
 }
 
