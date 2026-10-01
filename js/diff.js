@@ -10,7 +10,7 @@ const diffState = {
   base: "",        // "" = working tree vs HEAD; otherwise a commit sha (range base)
   data: null,
   open: new Set(), // open file paths
-  loading: false,
+  seq: 0,          // diff-request generation; only the newest may paint
 };
 
 export function diffGlyph() {
@@ -117,9 +117,13 @@ export async function openDiff() {
   if (!diffState.repos) {
     log.innerHTML = '<div id="empty"><h2>Changes</h2><p>Loading repos…</p></div>';
     state.emptyEl = document.getElementById("empty");
-    await loadRepos();
-    state.hooks.renderList();
   }
+  // Re-fetch repo cards on every entry (Chris, 2026-10-01): commits landed
+  // while the app sat open must appear in the commit picker and dirty pills
+  // without a full page reload — the old one-shot cache is why new changes
+  // "didn't come through" when moving between commits.
+  await loadRepos();
+  state.hooks.renderList();
   if (diffState.repo) await paintDiffRepo();
   else paintDiffRepos();
 }
@@ -222,16 +226,24 @@ async function paintDiffRepo() {
   log.appendChild(bar);
 
   if (!diffState.data) {
-    if (diffState.loading) return;
-    diffState.loading = true;
+    // Tag the request with a generation: rapid base switches used to paint
+    // the previous base's diff under the new picker selection, so only the
+    // newest response is allowed to store data or repaint.
+    const seq = ++diffState.seq;
     const q = "repo=" + encodeURIComponent(diffState.repo) +
       "&from=HEAD&to=" + encodeURIComponent(diffState.base);
+    const pending = document.createElement("div");
+    pending.className = "diff-none";
+    pending.textContent = "Loading diff…";
+    log.appendChild(pending);
     try {
-      diffState.data = await fetchJson("/api/diff/diff?" + q);
+      const fresh = await fetchJson("/api/diff/diff?" + q);
+      if (seq !== diffState.seq) return;
+      diffState.data = fresh;
     } catch (e) {
+      if (seq !== diffState.seq) return;
       diffState.data = { files: [], error: true };
     }
-    diffState.loading = false;
     if (diffState.repo) return paintDiffRepo();
     return;
   }
