@@ -15,6 +15,26 @@ function ensureLinkTargetHook() {
   linkTargetHookOn = true;
 }
 
+// GFM strikethrough: only `~~text~~` is a delimiter. Two lone tildes in one
+// message ("check ~13:15 ... a ~3 min boot") must not pair up and cross out
+// the whole sentence between them (Chris, 2026-09-29 — marked's GFM del rule
+// accepts single-tilde pairs). A lone `~` stays literal text; the double form
+// keeps working, as do code spans and paths like `~/mimo-kit`.
+let tildePatchOn = false;
+function ensureTildePatch() {
+  if (tildePatchOn || !window.marked || typeof marked.use !== "function") return;
+  marked.use({
+    tokenizer: {
+      del(src) {
+        if (/^~(?!~)/.test(src)) return { type: "text", raw: src.slice(0, 1), text: src.slice(0, 1) };
+        return false;
+      }
+    }
+  });
+  tildePatchOn = true;
+}
+ensureTildePatch();
+
 export function renderMd(text) {
   const src = text || "";
   const raw = window.marked ? marked.parse(src, { breaks: true, gfm: true }) : src;

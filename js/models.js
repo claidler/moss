@@ -47,6 +47,13 @@ function displayLabel(level) {
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
+// Hide internal variant tags in the UI (Chris, 2026-09-28: drop the
+// "hibrid48-uncensored" suffix from the Spark model name in the Moss app).
+function displayName(entry) {
+  const raw = String((entry && (entry.name || entry.id)) || "");
+  return raw.replace(/\s*hibrid\d+-uncensored\b/i, "").trim();
+}
+
 function chatById(id) {
   return state.chats.find((c) => c.id === id);
 }
@@ -109,7 +116,7 @@ function modelButton(entry, selectedId, inheritDefault) {
   copy.className = "chip-option-copy";
   const title = document.createElement("span");
   title.className = "chip-option-title";
-  title.textContent = entry.name || entry.id;
+  title.textContent = displayName(entry) || entry.id;
   copy.appendChild(title);
   if (entry.isDefault) {
     const badge = document.createElement("span");
@@ -158,7 +165,7 @@ function renderModelMenu(chat) {
   const groups = [];
   const seen = new Map();
   catalog.models.forEach((m) => {
-    const hay = ((m.name || "") + " " + (m.id || "") + " " + (m.providerLabel || "")).toLowerCase();
+    const hay = ((displayName(m) || "") + " " + (m.id || "") + " " + (m.providerLabel || "")).toLowerCase();
     if (q && !hay.includes(q)) return;
     const key = m.providerLabel || m.provider || "Other";
     if (!seen.has(key)) {
@@ -236,7 +243,7 @@ export function syncModelBar(chat) {
   const thinkLabelEl = $("thinkLabel");
   const thinkPick = $("thinkPick");
   const entry = entryFor(effectiveModel(chat));
-  if (modelLabel) modelLabel.textContent = (entry && (entry.name || entry.id)) || "Model";
+  if (modelLabel) modelLabel.textContent = displayName(entry) || "Model";
   const level = effectiveThinking(chat);
   if (thinkLabelEl) thinkLabelEl.textContent = thinkLabel(level);
   setNeedle(level);
