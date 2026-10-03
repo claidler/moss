@@ -230,6 +230,12 @@ async function steerFollowup(chatId, message, attachments) {
   }
 }
 
+// One steer attempt. The followup route owns failure (marks the row unsent);
+// do not retry here — a second chat.send can double-inject.
+async function steerOnce(chatId, message, attachments) {
+  return await steerFollowup(chatId, message, attachments);
+}
+
 async function abortChatRun(chatId) {
   const sessionKey = "moss-" + chatId;
   const h = await connectGatewayWs(null, {
@@ -260,4 +266,4 @@ async function abortChatRun(chatId) {
   }
 }
 
-module.exports = { gatewayToken, connectGatewayWs, gatewayRpc, startHub, ensureHub, subscribeSession, unsubscribeSession, steerFollowup, abortChatRun };
+module.exports = { gatewayToken, connectGatewayWs, gatewayRpc, startHub, ensureHub, subscribeSession, unsubscribeSession, steerFollowup, steerOnce, abortChatRun };

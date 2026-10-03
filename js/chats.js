@@ -117,6 +117,17 @@ export function add(role, text, tools, questions, opts) {
   if (tools && tools.length) paintTools(toolsEl, tools, opts && opts.toolGroups);
   if (thinking && thinkingList(thinking).length) paintThinking(thinkEl, thinking, Boolean(opts && opts.liveThinking), opts && opts.thinkingOpen);
   if (questions && questions.length) paintQsums(qEl, questions);
+  if (opts && opts.steerFailed && role === "user") {
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "steer-retry";
+    retry.textContent = "Didn't reach Moss — retry";
+    retry.addEventListener("click", () => {
+      const live = chatById(viewingChatId());
+      if (live) sendFollowup(live, text, { images: opts.images, files: opts.files });
+    });
+    bubble.appendChild(retry);
+  }
   row.appendChild(bubble);
   log.appendChild(row);
   if (!opts || opts.stick !== false) stickToBottom(true);
@@ -246,8 +257,8 @@ export function syncBusy() {
     stopBtn.disabled = !busy || stopping;
   }
   input.placeholder = state.view === "article"
-    ? (busy ? "Add a follow-up" : "Reply to this automation")
-    : (busy ? "Add a follow-up" : "Message Moss");
+    ? (busy ? "Steer this reply" : "Reply to this automation")
+    : (busy ? "Steer this reply" : "Message Moss");
   if (state.hooks.syncGoalChrome) state.hooks.syncGoalChrome();
   headAvatar.classList.toggle("working", busy && !stopping);
 }
@@ -283,7 +294,7 @@ export function paintChat(chat, opts) {
     if (!m || m.seed || (!m.content && !(m.tools && m.tools.length) && !(m.questions && m.questions.length) && !thinkingList(m.thinking).length)) return;
     const gs = m.role === "user" ? null : (groupStates[botIdx++] || null);
     add(m.role === "user" ? "user" : "bot", m.content || "", m.tools, m.questions, {
-      thinking: m.thinking, images: m.images, files: m.files, stick: false,
+      thinking: m.thinking, images: m.images, files: m.files, steerFailed: !!m.steerFailed, stick: false,
       toolGroups: gs && gs.tools,
       thinkingOpen: gs ? gs.thinking : undefined,
       mdView: gs && gs.mdView
@@ -474,6 +485,7 @@ export function saveChat(chat) {
     const think = thinkingList(m.thinking);
     if (think.length) row.thinking = think;
     if (m.seed) row.seed = true;
+    if (m.steerFailed) row.steerFailed = true;
     return row;
   });
   const first = msgs.find((m) => m.role === "user" && !m.seed);
@@ -649,7 +661,8 @@ export async function switchChat(id) {
   input.focus();
 }
 
-export async function sendFollowup(chat, text, atts) {
+export async function sendFollowup(chat, text, atts, opts) {
+  const steerOnly = !!(opts && opts.steerOnly);
   const items = normalizeImages(atts && atts.images);
   const files = normalizeFiles(atts && atts.files);
   const attsPayload = items.map((item) => {
@@ -666,13 +679,14 @@ export async function sendFollowup(chat, text, atts) {
   const names = items.map((i) => i.fileName).filter(Boolean);
   const rowExtras = { images: urls.length ? urls : undefined, imageNames: names.length ? names : undefined, files: files.length ? files : undefined };
   const withExtras = (content) => ({ role: "user", content, ...rowExtras });
-  if (isLiveView(chat.id)) add("user", text, undefined, undefined, { images: urls.length ? urls : undefined, files: files.length ? files : undefined });
+  if (isLiveView(chat.id) && !steerOnly) add("user", text, undefined, undefined, { images: urls.length ? urls : undefined, files: files.length ? files : undefined, steerFailed: false });
   try {
     const res = await fetch("/api/chats/" + chat.id + "/followup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: text,
+        steerOnly: steerOnly || undefined,
         attachments: attsPayload.length ? attsPayload : undefined,
         files: files.length ? files : undefined
       })
@@ -696,14 +710,25 @@ export async function sendFollowup(chat, text, atts) {
       else if (isLiveView(next.id)) syncBusy();
       return;
     }
+    if (res.status === 502) {
+      const next = rememberChat(await fetchChat(chat.id).catch(() => chat));
+      if (isLiveView(next.id)) paintChat(next, { stick: false });
+      else syncBusy();
+      return;
+    }
     throw new Error("HTTP " + res.status);
   } catch (e) {
     const last = (chat.messages || [])[(chat.messages || []).length - 1];
     if (!(last && last.role === "user" && last.content === text)) {
-      chat.messages = (chat.messages || []).concat([withExtras(text)]);
-      await saveChat(chat);
+      chat.messages = (chat.messages || []).concat([Object.assign(withExtras(text), { steerFailed: true })]);
+    } else {
+      last.steerFailed = true;
     }
-    if (isLiveView(chat.id)) setStatus("bad");
+    await saveChat(chat);
+    if (isLiveView(chat.id)) {
+      setStatus("bad");
+      paintChat(chat, { stick: false });
+    }
   } finally {
     if (isLiveView(chat.id)) {
       syncBusy();
@@ -792,6 +817,8 @@ export async function send(text, atts) {
     return;
   }
   if (!chat) return;
+  // Already responding or thinking: steer into the live run instead of
+  // starting a second turn.
   if (chat.pending) {
     await sendFollowup(chat, text, atts);
     return;
@@ -1006,6 +1033,18 @@ export async function startTurn(chat) {
       ensurePoll();
       tickPending();
       if (isLiveView(chatId)) syncBusy();
+      // Stale client thought the run was idle and POSTed a new turn. The
+      // proxy 409'd; steer the line we already saved into the live run.
+      if (e.code === "pending") {
+        const lastUser = (chat.messages || []).slice().reverse().find((m) => m && m.role === "user" && m.content);
+        if (lastUser) {
+          const names = Array.isArray(lastUser.imageNames) ? lastUser.imageNames : [];
+          await sendFollowup(chat, lastUser.content, {
+            images: (Array.isArray(lastUser.images) ? lastUser.images : []).map((url, i) => ({ url, mime: "image/jpeg", fileName: names[i] })),
+            files: lastUser.files
+          }, { steerOnly: true });
+        }
+      }
       return;
     }
     // Spec MossStream/StreamFailRunning: an unrecognized error does not

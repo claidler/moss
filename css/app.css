@@ -1350,3 +1350,18 @@
 .avatar.diff-face svg { width: 18px; height: 18px; filter: none; }
 body.diff .composer-stack { display: none; }
 body.diff #log { padding-bottom: 24px; }
+
+/* Follow-up that failed to steer into the live run. */
+.steer-retry {
+  display: block;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted-fg);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.steer-retry:hover { color: var(--fg); border-color: var(--fg); }

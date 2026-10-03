@@ -267,7 +267,14 @@ function commitAssistant(chatId, payload) {
   if (think.length) row.thinking = think;
   const after = lastUser >= 0 ? msgs.slice(lastUser + 1) : [];
   const existingA = after.find((m) => m && m.role === "assistant");
-  if (existingA) {
+  const existingText = existingA ? String(existingA.content || "").replace(/\s+/g, " ").trim() : "";
+  const nextText = String(text || "").replace(/\s+/g, " ").trim();
+  // A follow-up row can land before this commit, so lastUser is the follow-up
+  // and the previous turn's reply sits after it. Never overwrite a different
+  // committed reply — append the new one (queued steer / second turn).
+  if (existingA && existingText && existingText !== nextText) {
+    msgs.push(row);
+  } else if (existingA) {
     existingA.content = row.content;
     if (row.tools) existingA.tools = row.tools;
     else delete existingA.tools;

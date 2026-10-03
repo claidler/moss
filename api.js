@@ -13,7 +13,7 @@ const { json, readBody } = require("./http-utils");
 const { loadStore, saveStore, newChat } = require("./store");
 const { cleanMessages, titleFrom } = require("./text");
 const { OWNER_HANDLE, ANDROID_PACKAGE, ANDROID_FINGERPRINT } = require("./config");
-const { gatewayRpc, steerFollowup, abortChatRun } = require("./gateway");
+const { gatewayRpc, steerOnce, abortChatRun } = require("./gateway");
 const {
   runs,
   questionsFor,
@@ -295,9 +295,11 @@ async function followup(req, res, store, id) {
   let message = "";
   let attachments = null;
   let files = null;
+  let bodySteerOnly = false;
   try {
     const body = JSON.parse((await readBody(req)).toString("utf8") || "{}");
     message = String(body.message || "").trim();
+    bodySteerOnly = body.steerOnly === true;
     if (Array.isArray(body.attachments) && body.attachments.length) {
       attachments = body.attachments
         .filter((a) => a && typeof a.content === "string" && a.content)
@@ -336,10 +338,23 @@ async function followup(req, res, store, id) {
       return true;
     }
   }
+  // Persist the follow-up row first, but tagged unsent: a failed steer must
+  // never leave the transcript claiming the model saw this message. The tag
+  // clears only after the gateway accepts the steer.
   const msgs = Array.isArray(chat.messages) ? chat.messages : [];
   const last = msgs[msgs.length - 1];
-  if (!(last && last.role === "user" && last.content === message)) {
-    const row = { role: "user", content: message };
+  let row;
+  const steerOnly = bodySteerOnly;
+  if (steerOnly && last && last.role === "user" && last.content === message) {
+    // Row already stored (client saved it, then the new-turn POST 409'd
+    // because a run was already live). Steer that row; do not duplicate it.
+    row = last;
+  } else if (last && last.role === "user" && last.content === message && last.steerFailed) {
+    // Retrying an identical follow-up that previously failed to steer: reuse
+    // the row instead of stacking duplicates.
+    row = last;
+  } else {
+    row = { role: "user", content: message, steerFailed: true };
     if (attachments && attachments.length) {
       row.images = attachments.map((a) => "data:" + a.mimeType + ";base64," + a.content);
       const names = attachments.map((a) => a.fileName).filter(Boolean);
@@ -371,10 +386,17 @@ async function followup(req, res, store, id) {
       const note = uploads.fileAttachmentNote(files.map((f) => f.path), files.map((f) => f.fileName).filter(Boolean));
       if (note) steerText = steerText + "\n\n" + note;
     }
-    await steerFollowup(id, steerText, attachments);
-    json(res, 200, { ok: true });
+    await steerOnce(id, steerText, attachments);
+    delete row.steerFailed;
+    saveStore(store);
+    json(res, 200, { ok: true, steered: true });
   } catch (e) {
-    json(res, 502, { error: (e && e.message) || "steer failed" });
+    // Mark the row unsent so the UI offers retry. The text did not reach the
+    // live run; the client can steer again or start a fresh turn on 409.
+    row.steerFailed = true;
+    row.t = Date.now();
+    saveStore(store);
+    json(res, 502, { error: (e && e.message) || "steer failed", steerFailed: true });
   }
   return true;
 }

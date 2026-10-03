@@ -233,6 +233,7 @@ function cleanMessages(messages) {
       const thinking = slimThinking(m.thinking);
       if (thinking.length) row.thinking = thinking;
       if (m.seed) row.seed = true;
+      if (m.steerFailed) row.steerFailed = true;
       return row;
     });
 }
