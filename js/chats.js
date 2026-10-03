@@ -18,14 +18,14 @@ import { renderDiffRow, openDiff } from "./diff.js";
 import { showMossNote, syncUi, enableNotifications } from "./notify.js";
 import { syncModelBar, waitSettings } from "./models.js";
 
-export function setStatus(kind) {
+export function setStatus(kind, label) {
   if (kind === "busy") {
     headAvatar.classList.add("working");
     return;
   }
   headAvatar.classList.remove("working");
   statusEl.className = "status " + kind;
-  statusEl.title = kind === "ready" ? "Online" : "Offline";
+  statusEl.title = label || (kind === "ready" ? "Online" : "Offline");
 }
 
 export function clearComposer() {
@@ -420,6 +420,10 @@ export async function tickPending() {
         const wasPending = !!chat.pending;
         const wasAsking = !!chat.asking;
         const full = await fetchChat(chat.id);
+        // Spec MossStream/PollResult: if a send() made this chat live while
+        // the fetch was in flight, `full` is a stale snapshot - discard it
+        // instead of clobbering the fresh turn's flags (stop-button vanish).
+        if (liveStream(chat)) continue;
         rememberChat(full);
         const next = chatById(chat.id) || chat;
         alertChatState(wasPending, wasAsking, next);
@@ -1004,6 +1008,24 @@ export async function startTurn(chat) {
       if (isLiveView(chatId)) syncBusy();
       return;
     }
+    // Spec MossStream/StreamFailRunning: an unrecognized error does not
+    // mean the turn died - the gateway may still be running it (proxy
+    // timeout, 504 mid-stream). Fetch the truth; only declare the turn
+    // dead (paint "(error)", pending=false) when the server agrees it's
+    // over. Otherwise recover via the poller, like the dropped path.
+    let truth = null;
+    try { truth = await fetchChat(chatId); } catch {}
+    const stillRunning = !truth || truth.pending;
+    if (stillRunning) {
+      chat.abort = null;
+      chat.pending = true;
+      chat.partial = answer || chat.partial || "";
+      chat.liveTools = tools.length ? tools : (chat.liveTools || []);
+      ensurePoll();
+      tickPending();
+      if (isLiveView(chatId)) syncBusy();
+      return;
+    }
     const errText = "(error) " + raw;
     if (isLiveView(chatId)) {
       const bubble = liveBubble || log.querySelector(".msg.bot:last-of-type .bubble");
@@ -1044,17 +1066,32 @@ export async function startTurn(chat) {
   }
 }
 
+let gwChecking = false;
 export async function checkGateway() {
+  if (gwChecking) return;
+  gwChecking = true;
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 8000);
+  const t = setTimeout(() => ctrl.abort(), 10000);
   try {
-    const res = await fetch("/v1/models", { cache: "no-store", signal: ctrl.signal });
-    if (res.ok) setStatus("ready");
-    else setStatus("bad");
+    // Probe both halves the dot claims to describe. /api/config is
+    // answered by Moss itself; /v1/models is proxied through to the
+    // OpenClaw gateway (model availability). Deterministic: re-checked
+    // every 30s while visible, and on every visibilitychange/pageshow,
+    // so a transient failure self-heals instead of sticking until reload.
+    const [moss, models] = await Promise.allSettled([
+      fetch("/api/config", { cache: "no-store", signal: ctrl.signal }),
+      fetch("/v1/models", { cache: "no-store", signal: ctrl.signal }),
+    ]);
+    const mossOk = moss.status === "fulfilled" && moss.value.ok;
+    const modelOk = models.status === "fulfilled" && models.value.ok;
+    if (mossOk && modelOk) setStatus("ready", "Moss online · model reachable");
+    else if (mossOk) setStatus("bad", "Moss online · model unreachable");
+    else setStatus("bad", "Moss unreachable");
   } catch (e) {
     setStatus("bad");
   } finally {
     clearTimeout(t);
+    gwChecking = false;
   }
 }
 

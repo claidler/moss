@@ -142,6 +142,12 @@ bindGestures();
 bindDictation();
 bootSearch();
 checkGateway();
+// The dot self-heals: re-probe while the app is open, and immediately on
+// regaining visibility (the stale-red complaints were a boot-time-only probe).
+setInterval(() => { if (document.visibilityState === "visible") checkGateway(); }, 30000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkGateway(); });
+window.addEventListener("pageshow", (e) => { if (e.persisted) checkGateway(); });
+window.addEventListener("online", () => checkGateway());
 bootModels();
 bootSlash();
 bootGoals();
